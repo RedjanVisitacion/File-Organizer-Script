@@ -10,6 +10,8 @@ MENU
   3 - Preview organization without moving files
   0 - Exit
 
+After an action, press any key to return to the menu. Select 0 to exit.
+
 UNDO
 Each organization saves its moves in .organizer-history inside that folder.
 Keep this history folder so Undo can restore files to their original names.

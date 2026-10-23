@@ -8,7 +8,7 @@ set "FILE_ORGANIZER_PREVIEW=%~1"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; try { $body = [IO.File]::ReadAllText($env:FILE_ORGANIZER_SELF); $marker = '# POWERSHELL_' + 'PAYLOAD'; $code = $body.Substring($body.IndexOf($marker) + $marker.Length); $action = 'Menu'; if ($env:FILE_ORGANIZER_PREVIEW -eq '-Undo') { $action = 'Undo' }; if ($env:FILE_ORGANIZER_PREVIEW -eq '-Organize') { $action = 'Organize' }; & ([scriptblock]::Create($code)) -Action $action -WhatIf:($env:FILE_ORGANIZER_PREVIEW -eq '-WhatIf') } catch { Write-Host $_ -ForegroundColor Red; exit 1 }"
 set "organizer_result=%errorlevel%"
 echo.
-if not defined FILE_ORGANIZER_NO_PAUSE pause
+if not "%~1"=="" if not defined FILE_ORGANIZER_NO_PAUSE pause
 exit /b %organizer_result%
 # POWERSHELL_PAYLOAD
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -18,6 +18,10 @@ param(
     [ValidateSet('Menu', 'Organize', 'Undo', 'Preview')]
     [string]$Action = 'Menu'
 )
+
+$runOrganizer = {
+[CmdletBinding(SupportsShouldProcess = $true)]
+param([string]$Folder, [string]$Action, [hashtable]$Session)
 
 $ErrorActionPreference = 'Stop'
 function Write-PanelLine([string]$Text = '', [ConsoleColor]$Color = 'Green') {
@@ -99,8 +103,8 @@ if ($Action -eq 'Menu') {
         '1' { $Action = 'Organize' }
         '2' { $Action = 'Undo' }
         '3' { $Action = 'Preview' }
-        '0' { Write-Host '  [EXIT] Session closed.' -ForegroundColor DarkGreen; return }
-        default { Write-Host '  Invalid choice. Run again and choose 0, 1, 2, or 3.' -ForegroundColor Yellow; return }
+        '0' { $Session.Exit = $true; Write-Host '  [EXIT] Session closed.' -ForegroundColor DarkGreen; return }
+        default { Write-Host '  Invalid choice. Choose 0, 1, 2, or 3 from the menu.' -ForegroundColor Yellow; return }
     }
 }
 $previewOnly = $Action -eq 'Preview' -or [bool]$WhatIfPreference
@@ -252,4 +256,24 @@ if ($previewOnly) {
     Write-ResultPanel 'ORGANIZE // COMPLETE' ("Moved: {0}   |   Failed: {1}" -f $moved, $failed) $resultColor
     if ($moved -gt 0) { Write-Host '  [TIP] Choose option 2 next time to undo this run.' -ForegroundColor DarkGreen }
 }
-if ($failed -gt 0) { exit 1 }
+if ($failed -gt 0) { throw "$failed file(s) could not be organized. Review the warnings above." }
+}
+
+$session = @{ Exit = $false }
+$interactiveMenu = $Action -eq 'Menu' -and -not $WhatIfPreference
+do {
+    if ($interactiveMenu -and -not $env:FILE_ORGANIZER_NO_PAUSE) { Clear-Host }
+    try {
+        & $runOrganizer -Folder $Folder -Action $Action -Session $session -WhatIf:$WhatIfPreference
+    }
+    catch {
+        Write-Host ('  [ERROR] {0}' -f $_.Exception.Message) -ForegroundColor Red
+        if (-not $interactiveMenu) { throw }
+    }
+    if ($interactiveMenu -and -not $session.Exit -and -not $env:FILE_ORGANIZER_NO_PAUSE) {
+        Write-Host ''
+        Write-Host '  Press any key to return to the menu . . .' -ForegroundColor Cyan
+        try { $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') }
+        catch { $null = Read-Host '  Press Enter to return to the menu' }
+    }
+} while ($interactiveMenu -and -not $session.Exit)
