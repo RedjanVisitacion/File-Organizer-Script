@@ -90,7 +90,8 @@ if ($Action -eq 'Menu') {
         default { Write-Host '  Invalid choice. Run again and choose 0, 1, 2, or 3.' -ForegroundColor Yellow; return }
     }
 }
-if ($Action -eq 'Preview') { $WhatIfPreference = $true; $Action = 'Organize' }
+$previewOnly = $Action -eq 'Preview' -or [bool]$WhatIfPreference
+if ($Action -eq 'Preview') { $Action = 'Organize' }
 
 # Keep a separate journal for every run. Write it before moving any file so
 # an interrupted run can still be undone. JSON paths are relative to this folder.
@@ -179,7 +180,7 @@ $files = @(Get-ChildItem -LiteralPath $root.FullName -File | Where-Object {
 })
 
 Write-Host ('  [SCAN] {0} file(s) ready for sorting' -f $files.Count) -ForegroundColor Cyan
-if ($WhatIfPreference) { Write-Host '  [MODE] PREVIEW - no files will be moved' -ForegroundColor Yellow }
+if ($previewOnly) { Write-Host '  [MODE] PREVIEW - no files will be moved' -ForegroundColor Yellow }
 else { Write-Host '  [MODE] ORGANIZE - undo history enabled' -ForegroundColor DarkGreen }
 Write-Host ''
 $moved = 0
@@ -200,6 +201,11 @@ foreach ($file in $files) {
         $number++
     }
 
+    # Preview never enters the code that creates folders, writes history, or moves files.
+    if ($previewOnly) {
+        Write-Host ('  [WOULD MOVE] {0} -> {1}' -f $file.Name, $destination) -ForegroundColor Cyan
+        continue
+    }
     if ($PSCmdlet.ShouldProcess($file.FullName, "Move to $destination")) {
         $entry = $null
         try {
@@ -225,7 +231,7 @@ foreach ($file in $files) {
     }
 }
 
-if ($WhatIfPreference) {
+if ($previewOnly) {
     Write-ResultPanel 'PREVIEW // COMPLETE' ("Files checked: {0}   |   No changes made" -f $files.Count) 'Cyan'
 } else {
     $resultColor = 'Green'
