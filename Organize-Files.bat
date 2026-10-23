@@ -20,11 +20,48 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+function Write-PanelLine([string]$Text = '', [ConsoleColor]$Color = 'Green') {
+    # ASCII borders work in classic Command Prompt, including from a USB drive.
+    $width = 68
+    try { $width = [Math]::Max(20, [Math]::Min(68, $Host.UI.RawUI.WindowSize.Width - 8)) } catch { }
+    do {
+        $count = [Math]::Min($width, $Text.Length)
+        $line = $Text.Substring(0, $count)
+        Write-Host '  | ' -NoNewline -ForegroundColor DarkGreen
+        Write-Host $line.PadRight($width) -NoNewline -ForegroundColor $Color
+        Write-Host ' |' -ForegroundColor DarkGreen
+        $Text = $Text.Substring($count)
+    } while ($Text.Length -gt 0)
+}
+function Write-PanelBorder {
+    $width = 68
+    try { $width = [Math]::Max(20, [Math]::Min(68, $Host.UI.RawUI.WindowSize.Width - 8)) } catch { }
+    Write-Host ('  +-' + ('-' * $width) + '-+') -ForegroundColor DarkGreen
+}
+function Write-ResultPanel([string]$Title, [string]$Message, [ConsoleColor]$Color = 'Green') {
+    Write-Host ''
+    Write-PanelBorder
+    Write-PanelLine $Title $Color
+    Write-PanelLine $Message 'White'
+    Write-PanelLine
+    Write-PanelLine 'Created by Redjan Phil S. Visitacion' 'DarkGreen'
+    Write-PanelBorder
+    Write-Host ''
+}
+
 Write-Host ''
-Write-Host '  +==========================================================+' -ForegroundColor DarkGreen -BackgroundColor Black
-Write-Host '  |                  FILE ORGANIZER // ONLINE                |' -ForegroundColor Green -BackgroundColor Black
-Write-Host '  |          Created by Redjan Phil S. Visitacion             |' -ForegroundColor Green -BackgroundColor Black
-Write-Host '  +==========================================================+' -ForegroundColor DarkGreen -BackgroundColor Black
+Write-PanelBorder
+Write-PanelLine
+Write-PanelLine '   _____ ___ _     _____' 'Green'
+Write-PanelLine '  |  ___|_ _| |   | ____|' 'Green'
+Write-PanelLine '  | |_   | || |   |  _|' 'Green'
+Write-PanelLine '  |  _|  | || |___| |___' 'Green'
+Write-PanelLine '  |_|   |___|_____|_____|  O R G A N I Z E R' 'Green'
+Write-PanelLine
+Write-PanelLine '  LOCAL FILE CONTROL                       [ OFFLINE ]' 'Cyan'
+Write-PanelLine '  Created by Redjan Phil S. Visitacion' 'White'
+Write-PanelLine
+Write-PanelBorder
 Write-Host ''
 if ([string]::IsNullOrWhiteSpace($Folder)) { $Folder = $env:FILE_ORGANIZER_HOME }
 
@@ -33,18 +70,36 @@ $root = Get-Item -LiteralPath $Folder
 if (-not $root.PSIsContainer) {
     throw "Not a folder: $Folder"
 }
+Write-PanelBorder
+Write-PanelLine 'TARGET FOLDER' 'Cyan'
+Write-PanelLine $root.FullName 'White'
+Write-PanelBorder
+Write-Host ''
 
 if ($WhatIfPreference -and $Action -eq 'Menu') { $Action = 'Organize' }
 if ($Action -eq 'Menu') {
-    Write-Host '  [1] Organize files' -ForegroundColor Green
-    Write-Host '  [2] Undo last organization' -ForegroundColor Green
-    Write-Host '  [3] Preview organization (no changes)' -ForegroundColor Cyan
-    Write-Host '  [0] Exit' -ForegroundColor Green
-    switch (Read-Host '  Choose an option') {
+    Write-PanelBorder
+    Write-PanelLine 'CONTROL MENU' 'Cyan'
+    Write-PanelLine
+    Write-PanelLine '  [1]  ORGANIZE FILES' 'Green'
+    Write-PanelLine '       Sort files into folders by type.' 'Gray'
+    Write-PanelLine
+    Write-PanelLine '  [2]  UNDO LAST ORGANIZATION' 'Green'
+    Write-PanelLine '       Restore original locations using saved history.' 'Gray'
+    Write-PanelLine
+    Write-PanelLine '  [3]  PREVIEW ONLY' 'Cyan'
+    Write-PanelLine '       See planned moves before changing anything.' 'Gray'
+    Write-PanelLine
+    Write-PanelLine '  [0]  EXIT' 'Gray'
+    Write-PanelLine
+    Write-PanelBorder
+    Write-Host ''
+    Write-Host '  >> Select an option [0-3]' -ForegroundColor Cyan
+    switch (Read-Host '  command') {
         '1' { $Action = 'Organize' }
         '2' { $Action = 'Undo' }
         '3' { $Action = 'Preview' }
-        '0' { return }
+        '0' { Write-Host '  [EXIT] Session closed.' -ForegroundColor DarkGreen; return }
         default { Write-Host '  Invalid choice. Run again and choose 0, 1, 2, or 3.' -ForegroundColor Yellow; return }
     }
 }
@@ -68,7 +123,7 @@ if ($Action -eq 'Undo') {
         }
     }
     if (-not $latest) {
-        Write-Host '  [UNDO] No saved organization to undo in this folder.' -ForegroundColor Yellow
+        Write-ResultPanel 'UNDO // NO HISTORY' 'No saved organization to undo in this folder.' 'Yellow'
         return
     }
     $restored = 0
@@ -104,8 +159,7 @@ if ($Action -eq 'Undo') {
         }
         catch { Write-Warning ('Undo skipped "{0}": {1}' -f $entry.Source, $_.Exception.Message) }
     }
-    Write-Host ("  [UNDO] Restored: {0} | Remaining: {1}" -f $restored, $remaining.Count) -ForegroundColor Cyan
-    Write-Host '  Created by Redjan Phil S. Visitacion' -ForegroundColor Green
+    Write-ResultPanel 'UNDO // COMPLETE' ("Restored: {0}   |   Remaining: {1}" -f $restored, $remaining.Count) 'Cyan'
     return
 }
 
@@ -137,7 +191,9 @@ $files = @(Get-ChildItem -LiteralPath $root.FullName -File | Where-Object {
     -not ($targetFolder -eq $scriptFolder -and $_.Name -in $protectedNames)
 })
 
-Write-Host ('  [SCAN] {0} file(s) found in {1}' -f $files.Count, $root.FullName) -ForegroundColor Cyan -BackgroundColor Black
+Write-Host ('  [SCAN] {0} file(s) ready for sorting' -f $files.Count) -ForegroundColor Cyan
+if ($WhatIfPreference) { Write-Host '  [MODE] PREVIEW - no files will be moved' -ForegroundColor Yellow }
+else { Write-Host '  [MODE] ORGANIZE - undo history enabled' -ForegroundColor DarkGreen }
 Write-Host ''
 $moved = 0
 $failed = 0
@@ -182,10 +238,12 @@ foreach ($file in $files) {
     }
 }
 
-Write-Host ''
-Write-Host '  +-------------------- SCAN COMPLETE -----------------------+' -ForegroundColor DarkGreen -BackgroundColor Black
-Write-Host ("  [RESULT] Moved: {0} | Failed: {1}" -f $moved, $failed) -ForegroundColor Green -BackgroundColor Black
-Write-Host '  Created by Redjan Phil S. Visitacion' -ForegroundColor Green -BackgroundColor Black
-Write-Host '  +----------------------------------------------------------+' -ForegroundColor DarkGreen -BackgroundColor Black
-if ($WhatIfPreference) { Write-Host '  [PREVIEW] No files were moved.' -ForegroundColor Yellow -BackgroundColor Black }
+if ($WhatIfPreference) {
+    Write-ResultPanel 'PREVIEW // COMPLETE' ("Files checked: {0}   |   No changes made" -f $files.Count) 'Cyan'
+} else {
+    $resultColor = 'Green'
+    if ($failed -gt 0) { $resultColor = 'Yellow' }
+    Write-ResultPanel 'ORGANIZE // COMPLETE' ("Moved: {0}   |   Failed: {1}" -f $moved, $failed) $resultColor
+    if ($moved -gt 0) { Write-Host '  [TIP] Choose option 2 next time to undo this run.' -ForegroundColor DarkGreen }
+}
 if ($failed -gt 0) { exit 1 }
